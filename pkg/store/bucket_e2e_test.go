@@ -41,18 +41,6 @@ var (
 	}
 )
 
-type noopCache struct{}
-
-func (noopCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {}
-func (noopCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
-	return map[labels.Label][]byte{}, keys
-}
-
-func (noopCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {}
-func (noopCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
-	return map[uint64][]byte{}, ids
-}
-
 type swappableCache struct {
 	ptr storecache.IndexCache
 }
@@ -162,9 +150,10 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		dir,
 		s.cache,
 		nil,
-		0,
+		nil,
 		NewChunksLimiterFactory(maxChunksLimit),
 		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		20,
 		filterConf,
@@ -192,6 +181,8 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 
 // TODO(bwplotka): Benchmark Series.
 func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
+	t.Helper()
+
 	mint, maxt := s.store.TimeRange()
 	testutil.Equals(t, s.minTime, mint)
 	testutil.Equals(t, s.maxTime, maxt)
@@ -469,10 +460,10 @@ func TestBucketStore_e2e(t *testing.T) {
 
 type naivePartitioner struct{}
 
-func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []part) {
+func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []Part) {
 	for i := 0; i < length; i++ {
 		s, e := rng(i)
-		parts = append(parts, part{start: s, end: e, elemRng: [2]int{i, i + 1}})
+		parts = append(parts, Part{Start: s, End: e, ElemRng: [2]int{i, i + 1}})
 	}
 	return parts
 }

@@ -300,6 +300,11 @@ func runStore(
 
 	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), maxConcurrency)
 
+	chunkPool, err := store.NewDefaultChunkBytesPool(chunkPoolSizeBytes)
+	if err != nil {
+		return errors.Wrap(err, "create chunk pool")
+	}
+
 	bs, err := store.NewBucketStore(
 		logger,
 		reg,
@@ -308,9 +313,10 @@ func runStore(
 		dataDir,
 		indexCache,
 		queriesGate,
-		chunkPoolSizeBytes,
+		chunkPool,
 		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(maxSeriesCount),
+		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		verbose,
 		blockSyncConcurrency,
 		filterConf,
